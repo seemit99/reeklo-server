@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { JwtModule } from '@nestjs/jwt'
+import { JWT_SECRET } from './jwt-secret'
 import { AuthController } from './auth.controller'
 import { AuthService } from './auth.service'
 import { JwtStrategy } from './jwt.strategy'
@@ -7,7 +8,7 @@ import { JwtStrategy } from './jwt.strategy'
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'gamerspace-secret-key-must-be-at-least-256-bits-long-for-hs256',
+      secret: JWT_SECRET,
       signOptions: {
         algorithm: 'HS256',
         // Spring JWT_EXPIRATION(ms)과 동일 — jsonwebtoken은 숫자를 초로 해석하므로 변환
