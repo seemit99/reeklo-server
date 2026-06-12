@@ -83,7 +83,57 @@ model plazas {
   current_users Int      @default(0)
   map_data      Json?
   created_at    DateTime @default(now()) @db.Timestamp(6)
+  owner_id      BigInt?
+  plaza_type    String   @default("PUBLIC") @db.VarChar(20)
+  owner         users?   @relation("plaza_owner", fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   rooms         rooms[]
+
+  @@index([owner_id], map: "idx_plazas_owner")
+}
+
+model email_codes {
+  id         BigInt   @id @default(autoincrement())
+  email      String   @db.VarChar(100)
+  code       String   @db.VarChar(10)
+  purpose    String   @db.VarChar(20)
+  expires_at DateTime @db.Timestamp(6)
+  verified   Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([email, purpose], map: "idx_email_codes_lookup")
+}
+
+model friendships {
+  id           BigInt   @id @default(autoincrement())
+  requester_id BigInt?
+  addressee_id BigInt?
+  status       String   @default("PENDING") @db.VarChar(20)
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  requester    users?   @relation("friend_requester", fields: [requester_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  addressee    users?   @relation("friend_addressee", fields: [addressee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([requester_id, addressee_id])
+  @@index([addressee_id, status], map: "idx_friendships_addressee")
+  @@index([requester_id, status], map: "idx_friendships_requester")
+}
+
+model user_settings {
+  user_id    BigInt   @id
+  settings   Json     @default("{}")
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model user_blocks {
+  id              BigInt   @id @default(autoincrement())
+  user_id         BigInt
+  blocked_user_id BigInt
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+  blocker         users    @relation("block_owner", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  blocked         users    @relation("block_target", fields: [blocked_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, blocked_user_id])
 }
 
 model rooms {
@@ -131,6 +181,12 @@ model users {
   parties           parties[]
   rooms             rooms[]
   user_items        user_items[]
+  owned_plazas      plazas[]           @relation("plaza_owner")
+  friend_sent       friendships[]      @relation("friend_requester")
+  friend_received   friendships[]      @relation("friend_addressee")
+  user_settings     user_settings?
+  blocks_made       user_blocks[]      @relation("block_owner")
+  blocks_received   user_blocks[]      @relation("block_target")
 
   @@index([email], map: "idx_users_email")
   @@index([username], map: "idx_users_username")

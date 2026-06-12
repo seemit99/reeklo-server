@@ -8,6 +8,8 @@ import { CharacterModule } from './character/character.module'
 import { ItemsModule } from './items/items.module'
 import { UploadsModule } from './uploads/uploads.module'
 import { GatewayModule } from './gateway/gateway.module'
+import { FriendsModule } from './friends/friends.module'
+import { MailModule } from './mail/mail.module'
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { GatewayModule } from './gateway/gateway.module'
     ItemsModule,
     UploadsModule,
     GatewayModule,
+    FriendsModule,
+    MailModule,
   ],
 })
 export class AppModule {}

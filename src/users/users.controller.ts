@@ -22,6 +22,16 @@ export class UsersController {
     return ok(toUserDto(await this.usersService.getUser(user.userId)))
   }
 
+  @Get('me/settings')
+  async getSettings(@CurrentUser() user: JwtUser) {
+    return ok(await this.usersService.getSettings(user.userId))
+  }
+
+  @Put('me/settings')
+  async updateSettings(@CurrentUser() user: JwtUser, @Body() patch: Record<string, unknown>) {
+    return ok(await this.usersService.updateSettings(user.userId, patch ?? {}), '설정 저장 완료')
+  }
+
   @Get(':id')
   async getUser(@Param('id', ParseIntPipe) id: number) {
     return ok(toUserDto(await this.usersService.getUser(id)))

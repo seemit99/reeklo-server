@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common'
 import { IsNotEmpty, IsOptional, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
+import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { JwtUser } from '../auth/jwt.strategy'
 import { PlazasService } from './plazas.service'
 
 class CreatePlazaRequest {
@@ -23,6 +25,19 @@ export class PlazasController {
   @Get()
   async getPlazas() {
     return ok(await this.plazasService.getPlazas())
+  }
+
+  // ':id'보다 먼저 선언해야 'me'가 숫자 파싱에 걸리지 않음
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async myPlaza(@CurrentUser() user: JwtUser) {
+    return ok(await this.plazasService.getOrCreatePersonalPlaza(user.userId))
+  }
+
+  @Get('user/:userId')
+  @UseGuards(JwtAuthGuard)
+  async userPlaza(@Param('userId', ParseIntPipe) userId: number) {
+    return ok(await this.plazasService.getOrCreatePersonalPlaza(userId))
   }
 
   @Get(':id')

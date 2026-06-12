@@ -10,6 +10,8 @@ function toPlazaDto(p: any) {
     maxUsers: p.max_users,
     currentUsers: p.current_users,
     createdAt: p.created_at,
+    ownerId: p.owner_id ?? null,
+    plazaType: p.plaza_type ?? 'PUBLIC',
   }
 }
 
@@ -18,7 +20,29 @@ export class PlazasService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPlazas() {
-    return (await this.prisma.plazas.findMany({ orderBy: { id: 'asc' } })).map(toPlazaDto)
+    // 로비 목록에는 공용 광장만 — 개인 광장은 프로필/친구 경유로 입장
+    return (
+      await this.prisma.plazas.findMany({ where: { plaza_type: 'PUBLIC' }, orderBy: { id: 'asc' } })
+    ).map(toPlazaDto)
+  }
+
+  /** 개인 광장 (마이페이지) — 없으면 즉시 생성 */
+  async getOrCreatePersonalPlaza(ownerUserId: number) {
+    const ownerId = BigInt(ownerUserId)
+    const existing = await this.prisma.plazas.findFirst({ where: { owner_id: ownerId } })
+    if (existing) return toPlazaDto(existing)
+    const owner = await this.prisma.users.findUnique({ where: { id: ownerId } })
+    if (!owner) throw new BadRequestException('유저를 찾을 수 없습니다.')
+    const plaza = await this.prisma.plazas.create({
+      data: {
+        name: `${owner.nickname}의 광장`,
+        game_type: 'PERSONAL',
+        max_users: 20,
+        owner_id: ownerId,
+        plaza_type: 'PERSONAL',
+      },
+    })
+    return toPlazaDto(plaza)
   }
 
   async getPlaza(id: number) {

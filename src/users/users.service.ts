@@ -26,4 +26,22 @@ export class UsersService {
   async updateNickname(id: number, nickname: string) {
     await this.prisma.users.update({ where: { id }, data: { nickname } })
   }
+
+  // ── 유저 설정 (JSONB — 보낸 키만 병합 갱신) ─────────────
+
+  async getSettings(id: number): Promise<Record<string, unknown>> {
+    const row = await this.prisma.user_settings.findUnique({ where: { user_id: BigInt(id) } })
+    return (row?.settings as Record<string, unknown>) ?? {}
+  }
+
+  async updateSettings(id: number, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const current = await this.getSettings(id)
+    const merged = { ...current, ...patch }
+    await this.prisma.user_settings.upsert({
+      where: { user_id: BigInt(id) },
+      create: { user_id: BigInt(id), settings: merged as any },
+      update: { settings: merged as any, updated_at: new Date() },
+    })
+    return merged
+  }
 }

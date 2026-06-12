@@ -7,6 +7,7 @@ import {
 import { Server, Socket } from 'socket.io'
 import { PrismaService } from '../prisma/prisma.service'
 import { Member, PlazaRosterService } from './plaza-roster.service'
+import { PresenceService } from './presence.service'
 
 /**
  * Spring STOMP 핸들러 4종(PlazaUserHandler/PositionHandler/ChatController/RoomHandler/WebRTC)을
@@ -25,13 +26,11 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   @WebSocketServer() server!: Server
   private readonly logger = new Logger('GameGateway')
 
-  // userId → 소켓들 (WebRTC 1:1 직송용; 중복 탭 대비 Set)
-  private readonly userSockets = new Map<string, Set<Socket>>()
-
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly roster: PlazaRosterService,
+    private readonly presence: PresenceService,
   ) {}
 
   afterInit(server: Server) {
@@ -50,28 +49,39 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     })
   }
 
-  handleConnection(socket: Socket) {
+  async handleConnection(socket: Socket) {
     const userId = socket.data.userId as string
-    let set = this.userSockets.get(userId)
-    if (!set) {
-      set = new Set()
-      this.userSockets.set(userId, set)
+    // 오프라인→온라인 전환 시 친구들에게 알림
+    if (this.presence.add(userId, socket)) {
+      await this.notifyFriends(userId, 'friend:online')
     }
-    set.add(socket)
   }
 
   async handleDisconnect(socket: Socket) {
     const userId = socket.data.userId as string
-    const set = this.userSockets.get(userId)
-    if (set) {
-      set.delete(socket)
-      if (set.size === 0) this.userSockets.delete(userId)
+    if (this.presence.remove(userId, socket)) {
+      await this.notifyFriends(userId, 'friend:offline')
     }
     // 광장에 입장한 채 끊겼으면 자동 퇴장 (Spring SessionDisconnectEvent와 동일)
     const plazaId = socket.data.plazaId as string | undefined
     if (plazaId) {
       socket.data.plazaId = undefined
       await this.leavePlaza(plazaId, userId, null)
+    }
+  }
+
+  /** 내 친구(ACCEPTED) 중 온라인인 유저들에게 이벤트 전송 */
+  private async notifyFriends(userId: string, event: 'friend:online' | 'friend:offline') {
+    const id = BigInt(userId)
+    const rows = await this.prisma.friendships
+      .findMany({
+        where: { status: 'ACCEPTED', OR: [{ requester_id: id }, { addressee_id: id }] },
+        select: { requester_id: true, addressee_id: true },
+      })
+      .catch(() => [])
+    for (const r of rows) {
+      const friendId = String(r.requester_id) === userId ? r.addressee_id : r.requester_id
+      if (friendId != null) this.presence.sendToUser(friendId, event, { userId })
     }
   }
 
@@ -212,8 +222,59 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   private sendToUser(targetUserId: string | number, payload: unknown) {
-    const sockets = this.userSockets.get(String(targetUserId))
-    if (!sockets) return
-    for (const s of sockets) s.emit('webrtc:signal', payload)
+    this.presence.sendToUser(targetUserId, 'webrtc:signal', payload)
+  }
+
+  // ── 귓속말 (친구/설정/차단 검증 후 1:1 직송) ────────────
+
+  @SubscribeMessage('whisper:send')
+  async onWhisper(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
+    const fromId = socket.data.userId as string
+    const targetId = String(body.targetUserId)
+    const message = String(body.message ?? '').slice(0, 500)
+    if (!message.trim() || targetId === fromId) return
+
+    const fail = (reason: string) =>
+      socket.emit('whisper:error', { targetUserId: targetId, reason })
+
+    // 수신자가 발신자를 차단했으면 조용히 무시 (차단 사실 노출 안 함)
+    const blocked = await this.prisma.user_blocks.findFirst({
+      where: { user_id: BigInt(targetId), blocked_user_id: BigInt(fromId) },
+    })
+    const timestamp = new Date().toISOString()
+    if (blocked) {
+      socket.emit('whisper:sent', { targetUserId: targetId, message, timestamp })
+      return
+    }
+
+    // 수신자 설정: whisper = all | friends | none
+    const settingsRow = await this.prisma.user_settings.findUnique({
+      where: { user_id: BigInt(targetId) },
+    })
+    const mode = (settingsRow?.settings as any)?.whisper ?? 'all'
+    if (mode === 'none') return fail('귓속말을 받지 않는 유저입니다.')
+    if (mode === 'friends') {
+      const friend = await this.prisma.friendships.findFirst({
+        where: {
+          status: 'ACCEPTED',
+          OR: [
+            { requester_id: BigInt(fromId), addressee_id: BigInt(targetId) },
+            { requester_id: BigInt(targetId), addressee_id: BigInt(fromId) },
+          ],
+        },
+      })
+      if (!friend) return fail('친구의 귓속말만 받는 유저입니다.')
+    }
+
+    if (!this.presence.isOnline(targetId)) return fail('오프라인 유저입니다.')
+
+    const from = await this.prisma.users.findUnique({ where: { id: BigInt(fromId) } })
+    this.presence.sendToUser(targetId, 'whisper:receive', {
+      fromUserId: fromId,
+      fromNickname: from?.nickname ?? fromId,
+      message,
+      timestamp,
+    })
+    socket.emit('whisper:sent', { targetUserId: targetId, message, timestamp })
   }
 }
