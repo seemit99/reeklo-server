@@ -7,6 +7,7 @@ import { RoomsModule } from './rooms/rooms.module'
 import { CharacterModule } from './character/character.module'
 import { ItemsModule } from './items/items.module'
 import { UploadsModule } from './uploads/uploads.module'
+import { GatewayModule } from './gateway/gateway.module'
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UploadsModule } from './uploads/uploads.module'
     CharacterModule,
     ItemsModule,
     UploadsModule,
+    GatewayModule,
   ],
 })
 export class AppModule {}
