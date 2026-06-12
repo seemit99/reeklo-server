@@ -1,8 +1,13 @@
 // Socket.IO 게이트웨이 E2E — 두 유저로 광장/방/WebRTC/끊김 자동퇴장 시나리오 검증
 // 실행: node test/gateway-e2e.js (서버가 :3000에 떠 있어야 함)
-const { io } = require('C:/Users/박재우/dev/reeklo-wep/node_modules/socket.io-client')
+let io
+try { ({ io } = require('socket.io-client')) }
+catch { ({ io } = require(process.env.SIOC_PATH || 'C:/Users/박재우/dev/reeklo-wep/node_modules/socket.io-client')) }
 
-const BASE = 'http://localhost:3000'
+const BASE = process.env.BASE || 'http://localhost:3000'
+const EMAIL_A = process.env.EMAIL_A || 'node39727@t.io'
+const EMAIL_B = process.env.EMAIL_B || 'spr39727@t.io'
+const PASSWORD = process.env.PASSWORD || 'test1234'
 let failed = 0
 const okLog = (name) => console.log(`PASS ${name}`)
 const fail = (name, detail) => { failed++; console.error(`FAIL ${name}: ${detail}`) }
@@ -17,7 +22,7 @@ function waitEvent(socket, event, timeoutMs = 5000) {
 async function login(email) {
   const r = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'test1234' }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   })
   if (!r.ok) throw new Error(`login ${email}: ${r.status}`)
   return (await r.json()).data.accessToken
@@ -39,7 +44,7 @@ async function main() {
     fail('0 no-token rejected', 'connected without token')
   } catch (e) { okLog(`0 no-token rejected (${e.message})`) }
 
-  const [tokA, tokB] = await Promise.all([login('node39727@t.io'), login('spr39727@t.io')])
+  const [tokA, tokB] = await Promise.all([login(EMAIL_A), login(EMAIL_B)])
   const A = await connect(tokA)
   const B = await connect(tokB)
   okLog('1 both connected')
