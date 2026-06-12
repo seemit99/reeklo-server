@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model character_parts {
+  id                                                                     BigInt              @id @default(autoincrement())
+  creator_id                                                             BigInt?
+  name                                                                   String              @db.VarChar(100)
+  part_type                                                              String              @db.VarChar(20)
+  image_url                                                              String              @db.VarChar(500)
+  price                                                                  Int                 @default(0)
+  is_approved                                                            Boolean             @default(false)
+  download_count                                                         Int                 @default(0)
+  created_at                                                             DateTime            @default(now()) @db.Timestamp(6)
+  pivot_x                                                                Int?
+  pivot_y                                                                Int?
+  users                                                                  users?              @relation(fields: [creator_id], references: [id], onUpdate: NoAction)
+  character_presets_character_presets_accessory_part_idTocharacter_parts character_presets[] @relation("character_presets_accessory_part_idTocharacter_parts")
+  character_presets_character_presets_arm_l_part_idTocharacter_parts     character_presets[] @relation("character_presets_arm_l_part_idTocharacter_parts")
+  character_presets_character_presets_arm_r_part_idTocharacter_parts     character_presets[] @relation("character_presets_arm_r_part_idTocharacter_parts")
+  character_presets_character_presets_body_part_idTocharacter_parts      character_presets[] @relation("character_presets_body_part_idTocharacter_parts")
+  character_presets_character_presets_head_part_idTocharacter_parts      character_presets[] @relation("character_presets_head_part_idTocharacter_parts")
+  character_presets_character_presets_leg_l_part_idTocharacter_parts     character_presets[] @relation("character_presets_leg_l_part_idTocharacter_parts")
+  character_presets_character_presets_leg_r_part_idTocharacter_parts     character_presets[] @relation("character_presets_leg_r_part_idTocharacter_parts")
+  user_items                                                             user_items[]
+
+  @@index([is_approved], map: "idx_character_parts_approved")
+  @@index([creator_id], map: "idx_character_parts_creator")
+  @@index([part_type], map: "idx_character_parts_type")
+}
+
+model character_presets {
+  id                                                                   BigInt           @id @default(autoincrement())
+  user_id                                                              BigInt?          @unique
+  head_part_id                                                         BigInt?
+  body_part_id                                                         BigInt?
+  arm_l_part_id                                                        BigInt?
+  arm_r_part_id                                                        BigInt?
+  leg_l_part_id                                                        BigInt?
+  leg_r_part_id                                                        BigInt?
+  accessory_part_id                                                    BigInt?
+  updated_at                                                           DateTime         @default(now()) @db.Timestamp(6)
+  layer_order                                                          String?          @db.VarChar(120)
+  rig_pivots                                                           String?          @db.VarChar(255)
+  character_parts_character_presets_accessory_part_idTocharacter_parts character_parts? @relation("character_presets_accessory_part_idTocharacter_parts", fields: [accessory_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_arm_l_part_idTocharacter_parts     character_parts? @relation("character_presets_arm_l_part_idTocharacter_parts", fields: [arm_l_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_arm_r_part_idTocharacter_parts     character_parts? @relation("character_presets_arm_r_part_idTocharacter_parts", fields: [arm_r_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_body_part_idTocharacter_parts      character_parts? @relation("character_presets_body_part_idTocharacter_parts", fields: [body_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_head_part_idTocharacter_parts      character_parts? @relation("character_presets_head_part_idTocharacter_parts", fields: [head_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_leg_l_part_idTocharacter_parts     character_parts? @relation("character_presets_leg_l_part_idTocharacter_parts", fields: [leg_l_part_id], references: [id], onUpdate: NoAction)
+  character_parts_character_presets_leg_r_part_idTocharacter_parts     character_parts? @relation("character_presets_leg_r_part_idTocharacter_parts", fields: [leg_r_part_id], references: [id], onUpdate: NoAction)
+  users                                                                users?           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model parties {
+  id              BigInt   @id @default(autoincrement())
+  room_id         BigInt?
+  leader_id       BigInt?
+  game            String   @db.VarChar(50)
+  title           String   @db.VarChar(100)
+  max_members     Int      @default(5)
+  current_members Int      @default(1)
+  status          String   @default("OPEN") @db.VarChar(20)
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+  users           users?   @relation(fields: [leader_id], references: [id], onUpdate: NoAction)
+  rooms           rooms?   @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([leader_id], map: "idx_parties_leader_id")
+  @@index([room_id], map: "idx_parties_room_id")
+  @@index([status], map: "idx_parties_status")
+}
+
+model plazas {
+  id            BigInt   @id @default(autoincrement())
+  name          String   @db.VarChar(100)
+  game_type     String   @default("ALL") @db.VarChar(50)
+  max_users     Int      @default(100)
+  current_users Int      @default(0)
+  map_data      Json?
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+  rooms         rooms[]
+}
+
+model rooms {
+  id            BigInt    @id @default(autoincrement())
+  plaza_id      BigInt?
+  owner_id      BigInt?
+  title         String    @db.VarChar(100)
+  max_users     Int       @default(20)
+  current_users Int       @default(0)
+  is_private    Boolean   @default(false)
+  password      String?   @db.VarChar(100)
+  room_type     String    @default("GENERAL") @db.VarChar(20)
+  created_at    DateTime  @default(now()) @db.Timestamp(6)
+  parties       parties[]
+  users         users?    @relation(fields: [owner_id], references: [id], onUpdate: NoAction)
+  plazas        plazas?   @relation(fields: [plaza_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([owner_id], map: "idx_rooms_owner_id")
+  @@index([plaza_id], map: "idx_rooms_plaza_id")
+}
+
+model user_items {
+  id              BigInt           @id @default(autoincrement())
+  user_id         BigInt?
+  part_id         BigInt?
+  purchased_at    DateTime         @default(now()) @db.Timestamp(6)
+  character_parts character_parts? @relation(fields: [part_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users?           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, part_id])
+  @@index([part_id], map: "idx_user_items_part_id")
+  @@index([user_id], map: "idx_user_items_user_id")
+}
+
+model users {
+  id                BigInt             @id @default(autoincrement())
+  username          String             @unique @db.VarChar(50)
+  email             String             @unique @db.VarChar(100)
+  password          String             @db.VarChar(255)
+  nickname          String             @db.VarChar(50)
+  coin              Int                @default(0)
+  created_at        DateTime           @default(now()) @db.Timestamp(6)
+  character_parts   character_parts[]
+  character_presets character_presets?
+  parties           parties[]
+  rooms             rooms[]
+  user_items        user_items[]
+
+  @@index([email], map: "idx_users_email")
+  @@index([username], map: "idx_users_username")
+}
