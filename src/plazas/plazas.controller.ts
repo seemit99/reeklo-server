@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Put, UseGuards } from '@nestjs/common'
 import { IsNotEmpty, IsOptional, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
 import { CurrentUser } from '../auth/current-user.decorator'
@@ -63,5 +63,16 @@ export class PlazasController {
   async leave(@Param('id', ParseIntPipe) id: number) {
     await this.plazasService.leave(id)
     return ok(null, '광장 퇴장')
+  }
+
+  @Put(':id/decorations')
+  @UseGuards(JwtAuthGuard)
+  async updateDecorations(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { decorations: any },
+  ) {
+    const saved = await this.plazasService.updateDecorations(user.userId, id, body?.decorations)
+    return ok(saved, '광장을 저장했습니다.')
   }
 }
