@@ -226,4 +226,25 @@ export class FriendsService {
       where: { user_id: BigInt(userId), blocked_user_id: BigInt(targetUserId) },
     })
   }
+
+  // ── 신고 ─────────────────────────────────────────────
+
+  async report(
+    userId: number,
+    body: { targetUserId: number; reason: string; detail?: string; context?: string },
+  ) {
+    if (userId === body.targetUserId) throw new BadRequestException('자기 자신은 신고할 수 없습니다.')
+    if (!(await this.prisma.users.findUnique({ where: { id: BigInt(body.targetUserId) } }))) {
+      throw new NotFoundException('해당 유저를 찾을 수 없습니다.')
+    }
+    await this.prisma.reports.create({
+      data: {
+        reporter_id: BigInt(userId),
+        reported_user_id: BigInt(body.targetUserId),
+        reason: body.reason,
+        detail: body.detail ?? null,
+        context: body.context ?? null,
+      },
+    })
+  }
 }

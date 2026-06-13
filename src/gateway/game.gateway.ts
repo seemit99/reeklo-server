@@ -153,6 +153,14 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     socket.to(`plaza:${plazaId}`).emit('plaza:positions', { userId, position })
   }
 
+  @SubscribeMessage('plaza:emote')
+  onPlazaEmote(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
+    const userId = socket.data.userId as string
+    const plazaId = String(body.plazaId)
+    // 발신자 포함 전체 브로드캐스트 (이모트 종류만 중계)
+    this.server.to(`plaza:${plazaId}`).emit('plaza:emote', { userId, emote: String(body.emote) })
+  }
+
   @SubscribeMessage('plaza:chat')
   onPlazaChat(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
     const userId = socket.data.userId as string

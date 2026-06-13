@@ -125,6 +125,22 @@ model user_settings {
   users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
+model reports {
+  id               BigInt   @id @default(autoincrement())
+  reporter_id      BigInt
+  reported_user_id BigInt
+  reason           String   @db.VarChar(30)
+  detail           String?  @db.VarChar(500)
+  context          String?  @db.VarChar(50)
+  status           String   @default("OPEN") @db.VarChar(20)
+  created_at       DateTime @default(now()) @db.Timestamp(6)
+  reporter         users    @relation("report_reporter", fields: [reporter_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  reported         users    @relation("report_target", fields: [reported_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([reported_user_id], map: "idx_reports_reported")
+  @@index([status], map: "idx_reports_status")
+}
+
 model user_blocks {
   id              BigInt   @id @default(autoincrement())
   user_id         BigInt
@@ -175,6 +191,8 @@ model users {
   password          String             @db.VarChar(255)
   nickname          String             @db.VarChar(50)
   coin              Int                @default(0)
+  bio               String?            @db.VarChar(200)
+  main_game         String?            @db.VarChar(50)
   created_at        DateTime           @default(now()) @db.Timestamp(6)
   character_parts   character_parts[]
   character_presets character_presets?
@@ -187,6 +205,8 @@ model users {
   user_settings     user_settings?
   blocks_made       user_blocks[]      @relation("block_owner")
   blocks_received   user_blocks[]      @relation("block_target")
+  reports_made      reports[]          @relation("report_reporter")
+  reports_received  reports[]          @relation("report_target")
 
   @@index([email], map: "idx_users_email")
   @@index([username], map: "idx_users_username")

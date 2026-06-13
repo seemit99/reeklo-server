@@ -9,7 +9,22 @@ export function toUserDto(u: any) {
     email: u.email,
     nickname: u.nickname,
     coin: u.coin,
+    bio: u.bio ?? null,
+    mainGame: u.main_game ?? null,
     createdAt: u.created_at,
+  }
+}
+
+// 공개 프로필 (이메일 등 민감정보 제외)
+export function toProfileDto(u: any, online: boolean) {
+  return {
+    id: u.id,
+    username: u.username,
+    nickname: u.nickname,
+    bio: u.bio ?? null,
+    mainGame: u.main_game ?? null,
+    createdAt: u.created_at,
+    online,
   }
 }
 
@@ -25,6 +40,17 @@ export class UsersService {
 
   async updateNickname(id: number, nickname: string) {
     await this.prisma.users.update({ where: { id }, data: { nickname } })
+  }
+
+  async updateProfile(id: number, data: { nickname?: string; bio?: string; mainGame?: string }) {
+    await this.prisma.users.update({
+      where: { id },
+      data: {
+        ...(data.nickname !== undefined ? { nickname: data.nickname } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio } : {}),
+        ...(data.mainGame !== undefined ? { main_game: data.mainGame } : {}),
+      },
+    })
   }
 
   // ── 유저 설정 (JSONB — 보낸 키만 병합 갱신) ─────────────

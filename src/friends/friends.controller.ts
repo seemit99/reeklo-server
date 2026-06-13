@@ -1,7 +1,7 @@
 import {
   Body, Controller, Delete, Get, Param, ParseIntPipe, Post, UseGuards,
 } from '@nestjs/common'
-import { IsInt, IsOptional, IsString } from 'class-validator'
+import { IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -19,6 +19,20 @@ class SendRequestDto {
 class BlockDto {
   @IsInt()
   targetUserId!: number
+}
+
+class ReportDto {
+  @IsInt()
+  targetUserId!: number
+
+  @IsIn(['ABUSE', 'SPAM', 'INAPPROPRIATE', 'HARASSMENT', 'ETC'])
+  reason!: string
+
+  @IsOptional() @IsString() @MaxLength(500)
+  detail?: string
+
+  @IsOptional() @IsString()
+  context?: string
 }
 
 @Controller('api/friends')
@@ -82,5 +96,13 @@ export class FriendsController {
   async unblock(@CurrentUser() user: JwtUser, @Param('userId', ParseIntPipe) userId: number) {
     await this.friends.unblock(user.userId, userId)
     return ok(null, '차단을 해제했습니다.')
+  }
+
+  // ── 신고 ──────────────────────────────────────────────
+
+  @Post('reports')
+  async report(@CurrentUser() user: JwtUser, @Body() body: ReportDto) {
+    await this.friends.report(user.userId, body)
+    return ok(null, '신고가 접수되었습니다. 검토 후 조치하겠습니다.')
   }
 }
