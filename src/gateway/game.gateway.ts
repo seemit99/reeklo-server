@@ -233,6 +233,31 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.presence.sendToUser(targetUserId, 'webrtc:signal', payload)
   }
 
+  // ── 길드 채팅 (현재 소속 길드원 전체에게 직송) ──────────
+
+  @SubscribeMessage('guild:chat')
+  async onGuildChat(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
+    const userId = socket.data.userId as string
+    const message = String(body.message ?? '').slice(0, 500)
+    if (!message.trim()) return
+    const me = await this.prisma.guild_members.findFirst({ where: { user_id: BigInt(userId) } })
+    if (!me?.guild_id) return
+    const members = await this.prisma.guild_members.findMany({
+      where: { guild_id: me.guild_id },
+      select: { user_id: true },
+    })
+    const from = await this.prisma.users.findUnique({ where: { id: BigInt(userId) } })
+    const payload = {
+      userId,
+      nickname: from?.nickname ?? userId,
+      message,
+      timestamp: new Date().toISOString(),
+    }
+    for (const m of members) {
+      if (m.user_id != null) this.presence.sendToUser(m.user_id, 'guild:chat', payload)
+    }
+  }
+
   // ── 초대 (내가 있는 광장/방으로 친구 부르기) ───────────
 
   @SubscribeMessage('invite:send')

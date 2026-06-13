@@ -133,6 +133,26 @@ async function main() {
   sockB2.emit('webrtc:ice', { targetUserId: a.id, candidate: { c: 1 } })
   check('webrtc:ice 역방향 릴레이', (await iceSig)?.type === 'ice')
 
+  // ── 4-2. 길드 채팅 ──
+  // 기존 소속 정리 후 A 창설 → B 가입 → A가 보낸 길드챗을 B가 수신
+  await api('/api/guilds/leave', { method: 'POST', token: a.token }).catch(() => {})
+  await api('/api/guilds/leave', { method: 'POST', token: b.token }).catch(() => {})
+  const gname = 'E2E길드' + (a.id % 1000)
+  const created = await api('/api/guilds', {
+    method: 'POST', token: a.token, body: { name: gname, tag: 'E2E', gameType: 'LOL' },
+  })
+  if (created.json?.success) {
+    await api(`/api/guilds/${created.json.data.id}/join`, { method: 'POST', token: b.token })
+    const gchatRecv = waitFor(sockB2, 'guild:chat')
+    sockA.emit('guild:chat', { message: '길드 안녕!' })
+    const gc = await gchatRecv
+    check('길드 채팅 수신', gc?.message === '길드 안녕!' && gc?.nickname === A.nickname)
+    await api('/api/guilds/leave', { method: 'POST', token: b.token })
+    await api('/api/guilds/leave', { method: 'POST', token: a.token })
+  } else {
+    check('길드 채팅 수신(길드 생성 실패)', false)
+  }
+
   // ── 5. 차단 ──
   await api('/api/friends/blocks', { method: 'POST', token: b.token, body: { targetUserId: a.id } })
   const friendsA2 = await api('/api/friends', { token: a.token })
