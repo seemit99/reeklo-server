@@ -10,6 +10,7 @@ import { UploadsModule } from './uploads/uploads.module'
 import { GatewayModule } from './gateway/gateway.module'
 import { FriendsModule } from './friends/friends.module'
 import { MailModule } from './mail/mail.module'
+import { TurnModule } from './turn/turn.module'
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { MailModule } from './mail/mail.module'
     GatewayModule,
     FriendsModule,
     MailModule,
+    TurnModule,
   ],
 })
 export class AppModule {}
