@@ -111,6 +111,18 @@ async function main() {
   check('whisper=none 설정 시 거부', (await whisperErr)?.reason?.includes('받지 않는'))
   await api('/api/users/me/settings', { method: 'PUT', token: b.token, body: { whisper: 'all' } })
 
+  // ── 3-2. 초대 ──
+  const inviteRecv = waitFor(sockB2, 'invite:receive')
+  sockA.emit('invite:send', { targetUserId: b.id, kind: 'plaza', targetId: '1', targetName: '전체 광장' })
+  const inv = await inviteRecv
+  check('초대 수신', inv?.kind === 'plaza' && inv?.targetId === '1' && inv?.fromNickname === A.nickname)
+
+  await api('/api/users/me/settings', { method: 'PUT', token: b.token, body: { ignoreInvites: true } })
+  const inviteErr = waitFor(sockA, 'invite:error')
+  sockA.emit('invite:send', { targetUserId: b.id, kind: 'plaza', targetId: '1' })
+  check('초대무시 설정 시 거부', (await inviteErr)?.reason?.includes('받지 않는'))
+  await api('/api/users/me/settings', { method: 'PUT', token: b.token, body: { ignoreInvites: false } })
+
   // ── 4. WebRTC 시그널링 릴레이 (음성 기능의 서버 구간) ──
   const signal = waitFor(sockB2, 'webrtc:signal')
   sockA.emit('webrtc:offer', { targetUserId: b.id, sdp: 'dummy-sdp-offer' })

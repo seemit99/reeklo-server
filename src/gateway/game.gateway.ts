@@ -233,6 +233,46 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.presence.sendToUser(targetUserId, 'webrtc:signal', payload)
   }
 
+  // ── 초대 (내가 있는 광장/방으로 친구 부르기) ───────────
+
+  @SubscribeMessage('invite:send')
+  async onInvite(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
+    const fromId = socket.data.userId as string
+    const targetId = String(body.targetUserId)
+    if (targetId === fromId) return
+
+    const fail = (reason: string) =>
+      socket.emit('invite:error', { targetUserId: targetId, reason })
+
+    // 수신자가 발신자를 차단했으면 차단 사실 노출 없이 무시
+    const blocked = await this.prisma.user_blocks.findFirst({
+      where: { user_id: BigInt(targetId), blocked_user_id: BigInt(fromId) },
+    })
+    if (blocked) {
+      socket.emit('invite:sent', { targetUserId: targetId })
+      return
+    }
+
+    // 수신자 설정: 초대 무시
+    const settingsRow = await this.prisma.user_settings.findUnique({
+      where: { user_id: BigInt(targetId) },
+    })
+    if ((settingsRow?.settings as any)?.ignoreInvites) {
+      return fail('초대를 받지 않는 유저입니다.')
+    }
+    if (!this.presence.isOnline(targetId)) return fail('오프라인 유저입니다.')
+
+    const from = await this.prisma.users.findUnique({ where: { id: BigInt(fromId) } })
+    this.presence.sendToUser(targetId, 'invite:receive', {
+      fromUserId: fromId,
+      fromNickname: from?.nickname ?? fromId,
+      kind: body.kind === 'room' ? 'room' : 'plaza', // 'plaza' | 'room'
+      targetId: String(body.targetId),
+      targetName: body.targetName ?? null,
+    })
+    socket.emit('invite:sent', { targetUserId: targetId })
+  }
+
   // ── 귓속말 (친구/설정/차단 검증 후 1:1 직송) ────────────
 
   @SubscribeMessage('whisper:send')
