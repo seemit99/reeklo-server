@@ -42,6 +42,46 @@ export class UsersService {
     await this.prisma.users.update({ where: { id }, data: { nickname } })
   }
 
+  // ── 출석 체크 / 일일 코인 보상 ──────────────────────────
+  // 보상: 기본 50 + 연속일수 보너스(일당 10, 7일차 캡) → 50~110, 하루 거르면 streak 리셋
+
+  private static todayStr(): string {
+    return new Date().toISOString().slice(0, 10) // YYYY-MM-DD (UTC 기준 1일 1회)
+  }
+  private static rewardFor(streak: number): number {
+    return 50 + Math.min(streak, 7) * 10
+  }
+
+  async getCheckInStatus(id: number) {
+    const u = await this.getUser(id)
+    const last = u.last_check_in ? u.last_check_in.toISOString().slice(0, 10) : null
+    const today = UsersService.todayStr()
+    return {
+      canClaim: last !== today,
+      streak: u.attendance_streak ?? 0,
+      lastCheckIn: last,
+      nextReward: UsersService.rewardFor(last === today ? (u.attendance_streak ?? 1) : (u.attendance_streak ?? 0) + 1),
+      coin: u.coin,
+    }
+  }
+
+  async checkIn(id: number) {
+    const u = await this.getUser(id)
+    const today = UsersService.todayStr()
+    const last = u.last_check_in ? u.last_check_in.toISOString().slice(0, 10) : null
+    if (last === today) {
+      return { claimed: false, reward: 0, streak: u.attendance_streak, coin: u.coin, message: '오늘은 이미 출석했어요.' }
+    }
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    const streak = last === yesterday ? (u.attendance_streak ?? 0) + 1 : 1
+    const reward = UsersService.rewardFor(streak)
+    const updated = await this.prisma.users.update({
+      where: { id: BigInt(id) },
+      data: { coin: { increment: reward }, attendance_streak: streak, last_check_in: new Date(today) },
+    })
+    return { claimed: true, reward, streak, coin: updated.coin, message: `출석 완료! +${reward}🪙 (연속 ${streak}일)` }
+  }
+
   async updateProfile(id: number, data: { nickname?: string; bio?: string; mainGame?: string }) {
     await this.prisma.users.update({
       where: { id },

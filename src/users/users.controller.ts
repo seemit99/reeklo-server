@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Put, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Put, UseGuards } from '@nestjs/common'
 import { IsNotEmpty, IsOptional, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
 import { CurrentUser } from '../auth/current-user.decorator'
@@ -40,6 +40,17 @@ export class UsersController {
   @Get('me/settings')
   async getSettings(@CurrentUser() user: JwtUser) {
     return ok(await this.usersService.getSettings(user.userId))
+  }
+
+  @Get('me/checkin')
+  async checkInStatus(@CurrentUser() user: JwtUser) {
+    return ok(await this.usersService.getCheckInStatus(user.userId))
+  }
+
+  @Post('me/checkin')
+  async checkIn(@CurrentUser() user: JwtUser) {
+    const r = await this.usersService.checkIn(user.userId)
+    return ok(r, r.message)
   }
 
   @Put('me/settings')
