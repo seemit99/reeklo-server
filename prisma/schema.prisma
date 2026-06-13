@@ -61,6 +61,7 @@ model parties {
   id              BigInt   @id @default(autoincrement())
   room_id         BigInt?
   leader_id       BigInt?
+  plaza_id        BigInt?
   game            String   @db.VarChar(50)
   title           String   @db.VarChar(100)
   max_members     Int      @default(5)
@@ -73,6 +74,48 @@ model parties {
   @@index([leader_id], map: "idx_parties_leader_id")
   @@index([room_id], map: "idx_parties_room_id")
   @@index([status], map: "idx_parties_status")
+}
+
+model guilds {
+  id              BigInt              @id @default(autoincrement())
+  name            String              @unique @db.VarChar(30)
+  tag             String              @unique @db.VarChar(6)
+  description     String?             @db.VarChar(200)
+  leader_id       BigInt?
+  game_type       String              @default("ALL") @db.VarChar(20)
+  max_members     Int                 @default(30)
+  current_members Int                 @default(1)
+  emblem_url      String?             @db.VarChar(500)
+  is_public       Boolean             @default(true)
+  created_at      DateTime            @default(now()) @db.Timestamp(6)
+  leader          users?              @relation("guild_leader", fields: [leader_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  members         guild_members[]
+  invitations     guild_invitations[]
+
+  @@index([game_type], map: "idx_guilds_game_type")
+  @@index([leader_id], map: "idx_guilds_leader_id")
+}
+
+model guild_members {
+  id        BigInt   @id @default(autoincrement())
+  guild_id  BigInt?
+  user_id   BigInt?
+  role      String   @default("MEMBER") @db.VarChar(20)
+  joined_at DateTime @default(now()) @db.Timestamp(6)
+  guild     guilds?  @relation(fields: [guild_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      users?   @relation("guild_membership", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([guild_id, user_id])
+}
+
+model guild_invitations {
+  id         BigInt   @id @default(autoincrement())
+  guild_id   BigInt?
+  inviter_id BigInt?
+  invitee_id BigInt?
+  status     String   @default("PENDING") @db.VarChar(20)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  guild      guilds?  @relation(fields: [guild_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model plazas {
@@ -207,6 +250,8 @@ model users {
   blocks_received   user_blocks[]      @relation("block_target")
   reports_made      reports[]          @relation("report_reporter")
   reports_received  reports[]          @relation("report_target")
+  guilds_led        guilds[]           @relation("guild_leader")
+  guild_memberships guild_members[]    @relation("guild_membership")
 
   @@index([email], map: "idx_users_email")
   @@index([username], map: "idx_users_username")
