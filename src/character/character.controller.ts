@@ -24,6 +24,17 @@ export class CharacterController {
     return this.characterService.createPart(user.userId, req)
   }
 
+  // CharacterView에서 자신이 만든 파츠를 더블클릭해 이름·타입·이미지·가격·피벗을 수정할 때 호출한다.
+  @Put('api/parts/:id')
+  @UseGuards(JwtAuthGuard)
+  async updatePart(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtUser,
+    @Body() req: any,
+  ) {
+    return this.characterService.updatePart(id, user.userId, req)
+  }
+
   // CharacterView에서 자신이 만든 캐릭터 파츠를 삭제할 때 호출한다.
   @Delete('api/parts/:id')
   @UseGuards(JwtAuthGuard)

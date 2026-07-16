@@ -17,6 +17,7 @@ export interface Position {
 export interface Member {
   userId: string
   nickname: string | null
+  guildName: string | null
   parts: PartInfo[] | null
   layerOrder: string[] | null
   rigPivots: string | null

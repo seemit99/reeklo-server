@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS user_blocks (
     UNIQUE (user_id, blocked_user_id)
 );
 
+-- 초기 Spring 스키마(blocker_id/blocked_id)에서 Node/Prisma 컬럼명으로 안전하게 전환
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_blocks' AND column_name = 'blocker_id')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_blocks' AND column_name = 'user_id') THEN
+        ALTER TABLE user_blocks RENAME COLUMN blocker_id TO user_id;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_blocks' AND column_name = 'blocked_id')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_blocks' AND column_name = 'blocked_user_id') THEN
+        ALTER TABLE user_blocks RENAME COLUMN blocked_id TO blocked_user_id;
+    END IF;
+END $$;
+
 -- 개인 광장 (마이페이지): plazas에 소유자/타입 추가, 기존 행은 PUBLIC 유지
 ALTER TABLE plazas ADD COLUMN IF NOT EXISTS owner_id BIGINT REFERENCES users(id) ON DELETE CASCADE;
 ALTER TABLE plazas ADD COLUMN IF NOT EXISTS plaza_type VARCHAR(20) NOT NULL DEFAULT 'PUBLIC';

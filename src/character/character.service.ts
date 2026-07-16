@@ -63,6 +63,27 @@ export class CharacterService {
     return toPartDto(part)
   }
 
+  async updatePart(partId: number, userId: number, req: any) {
+    const part = await this.prisma.character_parts.findUnique({ where: { id: partId } })
+    if (!part) throw new NotFoundException('파츠를 찾을 수 없습니다.')
+    if (Number(part.creator_id) !== userId) {
+      throw new ForbiddenException('본인이 만든 파츠만 수정할 수 있습니다.')
+    }
+
+    const updated = await this.prisma.character_parts.update({
+      where: { id: partId },
+      data: {
+        name: req.name ?? part.name,
+        part_type: req.partType ?? part.part_type,
+        image_url: req.imageUrl ?? part.image_url,
+        price: req.price ?? part.price,
+        pivot_x: req.pivotX === undefined ? part.pivot_x : req.pivotX,
+        pivot_y: req.pivotY === undefined ? part.pivot_y : req.pivotY,
+      },
+    })
+    return toPartDto(updated)
+  }
+
   async deletePart(partId: number, userId: number) {
     const part = await this.prisma.character_parts.findUnique({ where: { id: partId } })
     if (!part) throw new NotFoundException('파츠를 찾을 수 없습니다.')

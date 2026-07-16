@@ -1,16 +1,18 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { JWT_SECRET } from './jwt-secret'
+import { PrismaService } from '../prisma/prisma.service'
 
 export interface JwtUser {
   userId: number
   email: string
+  sessionVersion: number
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: JWT_SECRET,
@@ -19,7 +21,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     })
   }
 
-  validate(payload: { sub: string; email: string }): JwtUser {
-    return { userId: Number(payload.sub), email: payload.email }
+  async validate(payload: { sub: string; email: string; sessionVersion?: number }): Promise<JwtUser> {
+    const user = await this.prisma.users.findUnique({
+      where: { id: BigInt(payload.sub) },
+      select: { session_version: true },
+    })
+    if (!user || payload.sessionVersion == null || user.session_version !== payload.sessionVersion) {
+      throw new UnauthorizedException('다른 기기에서 로그인되어 세션이 종료되었습니다.')
+    }
+    return { userId: Number(payload.sub), email: payload.email, sessionVersion: payload.sessionVersion }
   }
 }

@@ -238,6 +238,7 @@ model users {
   main_game         String?            @db.VarChar(50)
   last_check_in     DateTime?          @db.Date
   attendance_streak Int                @default(0)
+  session_version   Int                @default(0)
   created_at        DateTime           @default(now()) @db.Timestamp(6)
   character_parts   character_parts[]
   character_presets character_presets?

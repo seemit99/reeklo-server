@@ -43,13 +43,21 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
 
   afterInit(server: Server) {
     // 핸드셰이크에서 JWT 검증 — 무토큰/무효 토큰은 연결 거부 (Spring StompAuthChannelInterceptor와 동일)
-    server.use((socket, next) => {
+    server.use(async (socket, next) => {
       try {
         const raw =
           socket.handshake.auth?.token ??
           (socket.handshake.headers.authorization ?? '').replace(/^Bearer /, '')
         const payload = this.jwt.verify(raw, { algorithms: ['HS256', 'HS384', 'HS512'] } as any)
+        const user = await this.prisma.users.findUnique({
+          where: { id: BigInt(payload.sub) },
+          select: { session_version: true },
+        })
+        if (!user || payload.sessionVersion == null || user.session_version !== payload.sessionVersion) {
+          throw new Error('replaced session')
+        }
         socket.data.userId = String(payload.sub)
+        socket.data.sessionVersion = payload.sessionVersion
         next()
       } catch {
         next(new Error('유효한 인증 토큰이 필요합니다.'))
@@ -59,6 +67,7 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
 
   async handleConnection(socket: Socket) {
     const userId = socket.data.userId as string
+    this.presence.disconnectPreviousSessions(userId, socket)
     // 오프라인→온라인 전환 시 친구들에게 알림
     if (this.presence.add(userId, socket)) {
       await this.notifyFriends(userId, 'friend:online')
@@ -109,9 +118,14 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
     // 기존 접속자 명단을 새 유저에게 먼저 전송 (닉네임/파츠/마지막 위치 포함)
     socket.emit('plaza:roster', this.roster.getMembers(plazaId, userId))
 
+    const membership = await this.prisma.guild_members.findFirst({
+      where: { user_id: BigInt(userId) },
+      include: { guild: true },
+    })
     const member: Member = {
       userId,
       nickname: body.nickname ?? null,
+      guildName: membership?.guild?.name ?? null,
       parts: body.parts ?? null,
       layerOrder: body.layerOrder ?? null,
       rigPivots: body.rigPivots ?? null,
@@ -128,6 +142,7 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
       type: 'joined',
       userId,
       nickname: member.nickname,
+      guildName: member.guildName,
       parts: member.parts,
       layerOrder: member.layerOrder,
       rigPivots: member.rigPivots,
@@ -276,6 +291,38 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
     }
   }
 
+  @SubscribeMessage('social:chat')
+  async onSocialChat(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
+    const userId = socket.data.userId as string
+    const channel = body.channel === 'friends' ? 'friends' : 'global'
+    const message = String(body.message ?? '').trim().slice(0, 500)
+    if (!message) return
+    const from = await this.prisma.users.findUnique({ where: { id: BigInt(userId) } })
+    const payload = {
+      channel,
+      userId,
+      nickname: from?.nickname ?? userId,
+      message,
+      timestamp: new Date().toISOString(),
+    }
+    if (channel === 'global') {
+      this.server.emit('social:chat', payload)
+      return
+    }
+    const rows = await this.prisma.friendships.findMany({
+      where: {
+        status: 'ACCEPTED',
+        OR: [{ requester_id: BigInt(userId) }, { addressee_id: BigInt(userId) }],
+      },
+      select: { requester_id: true, addressee_id: true },
+    })
+    this.presence.sendToUser(userId, 'social:chat', payload)
+    for (const row of rows) {
+      const target = String(row.requester_id) === userId ? row.addressee_id : row.requester_id
+      if (target != null) this.presence.sendToUser(target, 'social:chat', payload)
+    }
+  }
+
   // ── 초대 (내가 있는 광장/방으로 친구 부르기) ───────────
 
   @SubscribeMessage('invite:send')
@@ -321,7 +368,18 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
   @SubscribeMessage('whisper:send')
   async onWhisper(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
     const fromId = socket.data.userId as string
-    const targetId = String(body.targetUserId)
+    let targetId = body.targetUserId != null ? String(body.targetUserId) : ''
+    if (!targetId && body.targetNickname) {
+      const target = await this.prisma.users.findFirst({
+        where: { nickname: { equals: String(body.targetNickname), mode: 'insensitive' } },
+        select: { id: true },
+      })
+      if (!target) {
+        socket.emit('whisper:error', { targetUserId: null, reason: '해당 닉네임의 유저를 찾을 수 없습니다.' })
+        return
+      }
+      targetId = String(target.id)
+    }
     const message = String(body.message ?? '').slice(0, 500)
     if (!message.trim() || targetId === fromId) return
 
