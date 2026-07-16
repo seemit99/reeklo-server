@@ -303,6 +303,7 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
       userId,
       nickname: from?.nickname ?? userId,
       message,
+      plazaId: socket.data.plazaId ?? null,
       timestamp: new Date().toISOString(),
     }
     if (channel === 'global') {
