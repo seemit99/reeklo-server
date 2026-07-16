@@ -12,6 +12,7 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
 // Spring UploadController와 동일: ./uploads/에 UUID 파일명으로 저장, {url} 반환
 @Controller('api/uploads')
 export class UploadsController {
+  // CharacterView가 파츠 이미지 파일을 서버에 저장하고 접근 URL을 발급받을 때 호출한다.
   @Post()
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(

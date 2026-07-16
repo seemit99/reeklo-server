@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import {
   ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit,
@@ -22,7 +22,7 @@ import { PresenceService } from './presence.service'
  */
 @Injectable()
 @WebSocketGateway({ path: '/ws', cors: { origin: true, credentials: true } })
-export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server
   private readonly logger = new Logger('GameGateway')
 
@@ -32,6 +32,14 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly roster: PlazaRosterService,
     private readonly presence: PresenceService,
   ) {}
+
+  async onModuleInit() {
+    await this.prisma.plazas.updateMany({
+      where: { current_users: { not: 0 } },
+      data: { current_users: 0 },
+    })
+    this.logger.log('광장 접속 인원 카운터를 초기화했습니다.')
+  }
 
   afterInit(server: Server) {
     // 핸드셰이크에서 JWT 검증 — 무토큰/무효 토큰은 연결 거부 (Spring StompAuthChannelInterceptor와 동일)
@@ -66,7 +74,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const plazaId = socket.data.plazaId as string | undefined
     if (plazaId) {
       socket.data.plazaId = undefined
-      await this.leavePlaza(plazaId, userId, null)
+      await this.leavePlaza(plazaId, userId, socket.id, null)
     }
   }
 
@@ -92,6 +100,12 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const userId = socket.data.userId as string
     const plazaId = String(body.plazaId)
 
+    const previousPlazaId = socket.data.plazaId as string | undefined
+    if (previousPlazaId && previousPlazaId !== plazaId) {
+      socket.leave(`plaza:${previousPlazaId}`)
+      await this.leavePlaza(previousPlazaId, userId, socket.id, null)
+    }
+
     // 기존 접속자 명단을 새 유저에게 먼저 전송 (닉네임/파츠/마지막 위치 포함)
     socket.emit('plaza:roster', this.roster.getMembers(plazaId, userId))
 
@@ -104,11 +118,8 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       position: null,
     }
     // 이미 입장한 유저면 DB 업데이트 스킵
-    if (this.roster.add(plazaId, member)) {
-      await this.prisma.plazas
-        .update({ where: { id: Number(plazaId) }, data: { current_users: { increment: 1 } } })
-        .catch(() => {})
-    }
+    this.roster.add(plazaId, member, socket.id)
+    await this.syncPlazaCount(plazaId)
 
     socket.join(`plaza:${plazaId}`)
     socket.data.plazaId = plazaId
@@ -129,18 +140,25 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const plazaId = String(body.plazaId)
     socket.leave(`plaza:${plazaId}`)
     if (socket.data.plazaId === plazaId) socket.data.plazaId = undefined
-    await this.leavePlaza(plazaId, userId, body.nickname ?? null)
+    await this.leavePlaza(plazaId, userId, socket.id, body.nickname ?? null)
   }
 
-  private async leavePlaza(plazaId: string, userId: string, nickname: string | null) {
-    if (this.roster.remove(plazaId, userId)) {
-      await this.prisma
-        .$executeRaw`UPDATE plazas SET current_users = GREATEST(current_users - 1, 0) WHERE id = ${Number(plazaId)}`
-        .catch(() => {})
-    }
+  private async leavePlaza(plazaId: string, userId: string, socketId: string, nickname: string | null) {
+    const userLeft = this.roster.remove(plazaId, userId, socketId)
+    await this.syncPlazaCount(plazaId)
+    if (!userLeft) return
     this.server.to(`plaza:${plazaId}`).emit('plaza:users', {
       type: 'left', userId, nickname, parts: null, layerOrder: null, rigPivots: null,
     })
+  }
+
+  private async syncPlazaCount(plazaId: string) {
+    await this.prisma.plazas
+      .update({
+        where: { id: Number(plazaId) },
+        data: { current_users: this.roster.count(plazaId) },
+      })
+      .catch((error) => this.logger.warn(`광장 ${plazaId} 인원 동기화 실패: ${error?.message ?? error}`))
   }
 
   @SubscribeMessage('plaza:position')
