@@ -21,6 +21,9 @@ export class RegisterRequest {
   // 이메일 인증 코드 — 메일 발송이 활성화된 환경에서는 필수
   @IsOptional()
   emailCode?: string
+
+  @IsIn(['Y'], { message: '개인정보 수집 및 이용에 동의해주세요.' })
+  privacyConsentYn!: 'Y'
 }
 
 export class SendCodeRequest {

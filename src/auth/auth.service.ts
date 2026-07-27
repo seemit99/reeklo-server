@@ -39,6 +39,9 @@ export class AuthService {
         password: await bcrypt.hash(req.password, 10),
         nickname: req.nickname,
         coin: 0,
+        privacy_consent_yn: req.privacyConsentYn,
+        privacy_consent_at: new Date(),
+        privacy_policy_version: '2026-07-27',
       },
     })
     return this.tokenOf(user.id, user.email, user.session_version)
