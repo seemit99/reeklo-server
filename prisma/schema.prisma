@@ -184,6 +184,30 @@ model reports {
   @@index([status], map: "idx_reports_status")
 }
 
+model chat_messages {
+  id                BigInt    @id @default(autoincrement())
+  message_id        String    @unique @default(uuid()) @db.Uuid
+  sender_id         BigInt?
+  recipient_id      BigInt?
+  sender_nickname   String    @db.VarChar(50)
+  channel_type      String    @db.VarChar(20)
+  channel_id        BigInt?
+  content           String    @db.Text
+  metadata          Json      @default("{}")
+  moderation_status String    @default("NORMAL") @db.VarChar(20)
+  use_yn            String    @default("Y") @db.Char(1)
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  edited_at         DateTime? @db.Timestamp(6)
+  deleted_at        DateTime? @db.Timestamp(6)
+  sender            users?    @relation("chat_message_sender", fields: [sender_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  recipient         users?    @relation("chat_message_recipient", fields: [recipient_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([channel_type, channel_id, use_yn, created_at], map: "idx_chat_messages_channel")
+  @@index([sender_id, created_at], map: "idx_chat_messages_sender")
+  @@index([recipient_id, created_at], map: "idx_chat_messages_recipient")
+  @@index([moderation_status, created_at], map: "idx_chat_messages_moderation")
+}
+
 model user_blocks {
   id              BigInt   @id @default(autoincrement())
   user_id         BigInt
@@ -228,33 +252,35 @@ model user_items {
 }
 
 model users {
-  id                BigInt             @id @default(autoincrement())
-  username          String             @unique @db.VarChar(50)
-  email             String             @unique @db.VarChar(100)
-  password          String             @db.VarChar(255)
-  nickname          String             @db.VarChar(50)
-  coin              Int                @default(0)
-  bio               String?            @db.VarChar(200)
-  main_game         String?            @db.VarChar(50)
-  last_check_in     DateTime?          @db.Date
-  attendance_streak Int                @default(0)
-  session_version   Int                @default(0)
-  created_at        DateTime           @default(now()) @db.Timestamp(6)
-  character_parts   character_parts[]
-  character_presets character_presets?
-  parties           parties[]
-  rooms             rooms[]
-  user_items        user_items[]
-  owned_plazas      plazas[]           @relation("plaza_owner")
-  friend_sent       friendships[]      @relation("friend_requester")
-  friend_received   friendships[]      @relation("friend_addressee")
-  user_settings     user_settings?
-  blocks_made       user_blocks[]      @relation("block_owner")
-  blocks_received   user_blocks[]      @relation("block_target")
-  reports_made      reports[]          @relation("report_reporter")
-  reports_received  reports[]          @relation("report_target")
-  guilds_led        guilds[]           @relation("guild_leader")
-  guild_memberships guild_members[]    @relation("guild_membership")
+  id                     BigInt             @id @default(autoincrement())
+  username               String             @unique @db.VarChar(50)
+  email                  String             @unique @db.VarChar(100)
+  password               String             @db.VarChar(255)
+  nickname               String             @db.VarChar(50)
+  coin                   Int                @default(0)
+  bio                    String?            @db.VarChar(200)
+  main_game              String?            @db.VarChar(50)
+  last_check_in          DateTime?          @db.Date
+  attendance_streak      Int                @default(0)
+  session_version        Int                @default(0)
+  created_at             DateTime           @default(now()) @db.Timestamp(6)
+  character_parts        character_parts[]
+  character_presets      character_presets?
+  parties                parties[]
+  rooms                  rooms[]
+  user_items             user_items[]
+  owned_plazas           plazas[]           @relation("plaza_owner")
+  friend_sent            friendships[]      @relation("friend_requester")
+  friend_received        friendships[]      @relation("friend_addressee")
+  user_settings          user_settings?
+  blocks_made            user_blocks[]      @relation("block_owner")
+  blocks_received        user_blocks[]      @relation("block_target")
+  reports_made           reports[]          @relation("report_reporter")
+  reports_received       reports[]          @relation("report_target")
+  chat_messages_sent     chat_messages[]    @relation("chat_message_sender")
+  chat_messages_received chat_messages[]    @relation("chat_message_recipient")
+  guilds_led             guilds[]           @relation("guild_leader")
+  guild_memberships      guild_members[]    @relation("guild_membership")
 
   @@index([email], map: "idx_users_email")
   @@index([username], map: "idx_users_username")
