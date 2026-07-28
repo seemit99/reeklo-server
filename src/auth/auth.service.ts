@@ -39,9 +39,12 @@ export class AuthService {
         password: await bcrypt.hash(req.password, 10),
         nickname: req.nickname,
         coin: 0,
+        privacy_consent_yn: req.privacyConsentYn,
+        privacy_consent_at: new Date(),
+        privacy_policy_version: '2026-07-27',
       },
     })
-    return this.tokenOf(user.id, user.email)
+    return this.tokenOf(user.id, user.email, user.session_version)
   }
 
   async login(req: LoginRequest): Promise<TokenResponse> {
@@ -49,7 +52,12 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(req.password, user.password))) {
       throw new BadRequestException('이메일 또는 비밀번호가 올바르지 않습니다.')
     }
-    return this.tokenOf(user.id, user.email)
+    const session = await this.prisma.users.update({
+      where: { id: user.id },
+      data: { session_version: { increment: 1 } },
+      select: { session_version: true },
+    })
+    return this.tokenOf(user.id, user.email, session.session_version)
   }
 
   // ── 이메일 인증 코드 ──────────────────────────────────
@@ -131,8 +139,8 @@ export class AuthService {
   }
 
   // Spring JwtTokenProvider와 동일: HS256, sub=userId, claim email
-  private tokenOf(userId: bigint | number, email: string): TokenResponse {
-    const accessToken = this.jwt.sign({ email }, { subject: String(userId) })
+  private tokenOf(userId: bigint | number, email: string, sessionVersion: number): TokenResponse {
+    const accessToken = this.jwt.sign({ email, sessionVersion }, { subject: String(userId) })
     return { accessToken, tokenType: 'Bearer' }
   }
 }

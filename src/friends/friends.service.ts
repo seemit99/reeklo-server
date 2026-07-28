@@ -219,6 +219,8 @@ export class FriendsService {
         },
       }),
     ])
+    // 차단으로 친구/대기 요청이 삭제됐음을 상대 화면에도 즉시 반영한다.
+    this.presence.sendToUser(other, 'friend:removed', { userId: String(userId) })
   }
 
   async unblock(userId: number, targetUserId: number) {

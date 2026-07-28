@@ -1,7 +1,7 @@
 import {
   Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGuards,
 } from '@nestjs/common'
-import { IsNotEmpty, IsOptional, MaxLength } from 'class-validator'
+import { IsArray, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -17,22 +17,44 @@ class CreateRoomRequest {
   @IsOptional() isPrivate?: boolean
   @IsOptional() password?: string
   @IsOptional() roomType?: string
+  @IsString() categoryCode!: string
+  @IsOptional() @MaxLength(300) description?: string
+  @IsOptional() @IsArray() tags?: string[]
 }
 
 @Controller('api/rooms')
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
+  // PlazaView의 방 목록 패널에서 특정 광장에 만들어진 방들을 조회할 때 호출한다.
   @Get()
-  async getRooms(@Query('plazaId', ParseIntPipe) plazaId: number) {
-    return ok(await this.roomsService.getRooms(plazaId))
+  async getRooms(
+    @Query('plazaId', ParseIntPipe) plazaId: number,
+    @Query('category') category?: string,
+    @Query('keyword') keyword?: string,
+    @Query('tag') tag?: string,
+    @Query('onlyJoinable') onlyJoinable?: string,
+  ) {
+    return ok(await this.roomsService.getRooms(plazaId, {
+      category,
+      keyword,
+      tag,
+      onlyJoinable: onlyJoinable === 'true',
+    }))
   }
 
+  @Get('categories/all')
+  async getCategories() {
+    return ok(await this.roomsService.getCategories())
+  }
+
+  // RoomView 진입 시 방 제목·소유자·정원 등 상세 정보를 불러올 때 호출한다.
   @Get(':id')
   async getRoom(@Param('id', ParseIntPipe) id: number) {
     return ok(await this.roomsService.getRoom(id))
   }
 
+  // PlazaView의 방 만들기 모달에서 현재 사용자를 방장으로 새 방을 생성할 때 호출한다.
   @Post()
   @UseGuards(JwtAuthGuard)
   async createRoom(
@@ -43,6 +65,7 @@ export class RoomsController {
     return ok(await this.roomsService.createRoom(user.userId, plazaId, req), '방 생성 완료')
   }
 
+  // 사용자가 방에 들어가기 전 비밀번호와 정원을 검사하고 방 인원을 증가시킬 때 호출한다.
   @Post(':id/join')
   @UseGuards(JwtAuthGuard)
   async join(@Param('id', ParseIntPipe) id: number, @Body() body: { password?: string } | undefined) {
@@ -50,6 +73,7 @@ export class RoomsController {
     return ok(null, '방 입장')
   }
 
+  // RoomView에서 나갈 때 방 인원을 감소시키고 빈 방이면 자동 삭제할 때 호출한다.
   @Post(':id/leave')
   @UseGuards(JwtAuthGuard)
   async leave(@Param('id', ParseIntPipe) id: number) {
@@ -57,6 +81,7 @@ export class RoomsController {
     return ok(null, '방 퇴장')
   }
 
+  // RoomView에서 방장이 방을 직접 삭제할 때 호출한다.
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   async deleteRoom(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtUser) {

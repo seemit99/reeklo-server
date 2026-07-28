@@ -38,4 +38,14 @@ export class PresenceService {
     if (!set) return
     for (const s of set) s.emit(event, payload)
   }
+
+  disconnectPreviousSessions(userId: string | number | bigint, currentSocket: Socket): void {
+    const set = this.sockets.get(String(userId))
+    if (!set) return
+    for (const socket of [...set]) {
+      if (socket.id === currentSocket.id) continue
+      socket.emit('session:replaced', { message: '다른 기기에서 로그인되어 로그아웃되었습니다.' })
+      socket.disconnect(true)
+    }
+  }
 }

@@ -2,7 +2,7 @@
 // 실행: node test/gateway-e2e.js (서버가 :3000에 떠 있어야 함)
 let io
 try { ({ io } = require('socket.io-client')) }
-catch { ({ io } = require(process.env.SIOC_PATH || 'C:/Users/박재우/dev/reeklo-wep/node_modules/socket.io-client')) }
+catch { ({ io } = require(process.env.SIOC_PATH || 'C:/reeklo-web/node_modules/socket.io-client')) }
 
 const BASE = process.env.BASE || 'http://localhost:3000'
 const EMAIL_A = process.env.EMAIL_A || 'node39727@t.io'

@@ -2,7 +2,7 @@
 // PlazaView/RoomView/webrtc.js가 쓰는 destination 문자열을 그대로 사용한다.
 // 실행: node test/frontend-protocol-e2e.js (서버 :3000 필요)
 const { pathToFileURL } = require('url')
-const { io } = require('C:/Users/박재우/dev/reeklo-wep/node_modules/socket.io-client')
+const { io } = require('C:/reeklo-web/node_modules/socket.io-client')
 
 const BASE = 'http://localhost:3000'
 let failed = 0
@@ -54,7 +54,7 @@ function waitFor(store, destination, timeoutMs = 5000) {
 }
 
 async function main() {
-  const proto = await import(pathToFileURL('C:/Users/박재우/dev/reeklo-wep/src/services/socketProtocol.js'))
+  const proto = await import(pathToFileURL('C:/reeklo-web/src/services/socketProtocol.js'))
 
   const [tokA, tokB] = await Promise.all([login('node39727@t.io'), login('spr39727@t.io')])
   const sockA = await connect(tokA)

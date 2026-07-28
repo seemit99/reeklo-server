@@ -15,6 +15,7 @@ const TTL_SEC = 12 * 60 * 60 // 자격증명 12시간 유효
 @Controller('api/turn-credentials')
 @UseGuards(JwtAuthGuard)
 export class TurnController {
+  // WebRTC 음성 연결이 NAT를 통과하도록 STUN/TURN 서버와 임시 인증 정보를 받을 때 호출한다.
   @Get()
   get() {
     const secret = process.env.TURN_SECRET
