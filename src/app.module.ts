@@ -12,6 +12,7 @@ import { FriendsModule } from './friends/friends.module'
 import { MailModule } from './mail/mail.module'
 import { TurnModule } from './turn/turn.module'
 import { GuildsModule } from './guilds/guilds.module'
+import { AdminModule } from './admin/admin.module'
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { GuildsModule } from './guilds/guilds.module'
     MailModule,
     TurnModule,
     GuildsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

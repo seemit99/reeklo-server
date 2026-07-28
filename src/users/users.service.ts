@@ -11,6 +11,8 @@ export function toUserDto(u: any) {
     coin: u.coin,
     bio: u.bio ?? null,
     mainGame: u.main_game ?? null,
+    role: u.role ?? 'USER',
+    useYn: u.use_yn ?? 'Y',
     createdAt: u.created_at,
   }
 }

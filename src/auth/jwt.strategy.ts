@@ -24,9 +24,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: { sub: string; email: string; sessionVersion?: number }): Promise<JwtUser> {
     const user = await this.prisma.users.findUnique({
       where: { id: BigInt(payload.sub) },
-      select: { session_version: true },
+      select: { session_version: true, use_yn: true },
     })
-    if (!user || payload.sessionVersion == null || user.session_version !== payload.sessionVersion) {
+    if (
+      !user ||
+      user.use_yn !== 'Y' ||
+      payload.sessionVersion == null ||
+      user.session_version !== payload.sessionVersion
+    ) {
       throw new UnauthorizedException('다른 기기에서 로그인되어 세션이 종료되었습니다.')
     }
     return { userId: Number(payload.sub), email: payload.email, sessionVersion: payload.sessionVersion }

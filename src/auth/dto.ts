@@ -1,4 +1,5 @@
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, Length, MaxLength, MinLength } from 'class-validator'
+import { IsEmail, IsIn, IsNotEmpty, Length, Matches, MaxLength, MinLength } from 'class-validator'
+import { RECOVERY_QUESTIONS } from './recovery-questions'
 
 // Spring AuthDto와 동일한 필드/검증 메시지
 export class RegisterRequest {
@@ -18,12 +19,15 @@ export class RegisterRequest {
   @IsNotEmpty({ message: '닉네임을 입력해주세요.' })
   nickname!: string
 
-  // 이메일 인증 코드 — 메일 발송이 활성화된 환경에서는 필수
-  @IsOptional()
-  emailCode?: string
-
   @IsIn(['Y'], { message: '개인정보 수집 및 이용에 동의해주세요.' })
   privacyConsentYn!: 'Y'
+
+  @IsIn(RECOVERY_QUESTIONS, { message: '비밀번호 찾기 질문을 선택해주세요.' })
+  recoveryQuestion!: string
+
+  @Length(2, 100, { message: '비밀번호 찾기 답변은 2~100자로 입력해주세요.' })
+  @Matches(/\S/, { message: '비밀번호 찾기 답변을 입력해주세요.' })
+  recoveryAnswer!: string
 }
 
 export class SendCodeRequest {
@@ -57,6 +61,33 @@ export class ResetPasswordRequest {
   newPassword!: string
 }
 
+export class ResetPasswordByQuestionRequest {
+  @IsEmail({}, { message: '이메일 형식이 올바르지 않습니다.' })
+  email!: string
+
+  @IsIn(RECOVERY_QUESTIONS, { message: '가입할 때 선택한 질문을 골라주세요.' })
+  recoveryQuestion!: string
+
+  @Length(2, 100, { message: '비밀번호 찾기 답변은 2~100자로 입력해주세요.' })
+  @Matches(/\S/, { message: '비밀번호 찾기 답변을 입력해주세요.' })
+  recoveryAnswer!: string
+
+  @MinLength(6, { message: '비밀번호는 6자 이상이어야 합니다.' })
+  newPassword!: string
+}
+
+export class SetRecoveryQuestionRequest {
+  @IsNotEmpty({ message: '현재 비밀번호를 입력해주세요.' })
+  currentPassword!: string
+
+  @IsIn(RECOVERY_QUESTIONS, { message: '비밀번호 찾기 질문을 선택해주세요.' })
+  recoveryQuestion!: string
+
+  @Length(2, 100, { message: '비밀번호 찾기 답변은 2~100자로 입력해주세요.' })
+  @Matches(/\S/, { message: '비밀번호 찾기 답변을 입력해주세요.' })
+  recoveryAnswer!: string
+}
+
 export class ChangePasswordRequest {
   @IsNotEmpty({ message: '현재 비밀번호를 입력해주세요.' })
   currentPassword!: string
@@ -66,7 +97,7 @@ export class ChangePasswordRequest {
 }
 
 export class LoginRequest {
-  @IsNotEmpty({ message: '이메일을 입력해주세요.' })
+  @IsNotEmpty({ message: '이메일 또는 아이디를 입력해주세요.' })
   email!: string
 
   @IsNotEmpty({ message: '비밀번호를 입력해주세요.' })
