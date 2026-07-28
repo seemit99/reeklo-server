@@ -108,6 +108,27 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
   async onPlazaJoin(@ConnectedSocket() socket: Socket, @MessageBody() body: any) {
     const userId = socket.data.userId as string
     const plazaId = String(body.plazaId)
+    const plaza = await this.prisma.plazas.findFirst({
+      where: { id: BigInt(plazaId), use_yn: 'Y' },
+      select: { is_private: true },
+    })
+    if (!plaza) {
+      socket.emit('plaza:join-error', { message: '이용 가능한 광장을 찾을 수 없습니다.' })
+      return
+    }
+    if (plaza.is_private) {
+      try {
+        const access = this.jwt.verify(body.accessToken, { algorithms: ['HS256'] } as any)
+        if (
+          access?.purpose !== 'plaza-access' ||
+          String(access?.sub) !== userId ||
+          String(access?.plazaId) !== plazaId
+        ) throw new Error('invalid plaza access token')
+      } catch {
+        socket.emit('plaza:join-error', { message: '비밀 광장 비밀번호 확인이 필요합니다.' })
+        return
+      }
+    }
 
     const previousPlazaId = socket.data.plazaId as string | undefined
     if (previousPlazaId && previousPlazaId !== plazaId) {
@@ -168,12 +189,29 @@ export class GameGateway implements OnModuleInit, OnGatewayInit, OnGatewayConnec
   }
 
   private async syncPlazaCount(plazaId: string) {
+    const currentUsers = this.roster.count(plazaId)
     await this.prisma.plazas
       .update({
         where: { id: Number(plazaId) },
-        data: { current_users: this.roster.count(plazaId) },
+        data: { current_users: currentUsers },
       })
       .catch((error) => this.logger.warn(`광장 ${plazaId} 인원 동기화 실패: ${error?.message ?? error}`))
+
+    // 운영 광장(owner_id 없음)과 개인 광장은 유지한다.
+    // 사용자 생성 공개 광장만 마지막 사용자가 나가면 기록을 남긴 채 목록에서 숨긴다.
+    if (currentUsers === 0) {
+      await this.prisma.plazas
+        .updateMany({
+          where: {
+            id: Number(plazaId),
+            plaza_type: 'PUBLIC',
+            owner_id: { not: null },
+            use_yn: 'Y',
+          },
+          data: { use_yn: 'N' },
+        })
+        .catch((error) => this.logger.warn(`광장 ${plazaId} 비활성화 실패: ${error?.message ?? error}`))
+    }
   }
 
   @SubscribeMessage('plaza:position')

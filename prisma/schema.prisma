@@ -119,19 +119,26 @@ model guild_invitations {
 }
 
 model plazas {
-  id            BigInt   @id @default(autoincrement())
-  name          String   @db.VarChar(100)
-  game_type     String   @default("ALL") @db.VarChar(50)
-  max_users     Int      @default(100)
-  current_users Int      @default(0)
+  id            BigInt       @id @default(autoincrement())
+  name          String       @db.VarChar(100)
+  game_type     String       @default("ALL") @db.VarChar(50)
+  max_users     Int          @default(100)
+  current_users Int          @default(0)
   map_data      Json?
-  created_at    DateTime @default(now()) @db.Timestamp(6)
+  created_at    DateTime     @default(now()) @db.Timestamp(6)
   owner_id      BigInt?
-  plaza_type    String   @default("PUBLIC") @db.VarChar(20)
-  owner         users?   @relation("plaza_owner", fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plaza_type    String       @default("PUBLIC") @db.VarChar(20)
+  use_yn        String       @default("Y") @db.Char(1)
+  category_code String       @default("GENERAL") @db.VarChar(30)
+  description   String?      @db.VarChar(300)
+  is_private    Boolean      @default(false)
+  password_hash String?      @db.VarChar(100)
+  owner         users?       @relation("plaza_owner", fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   rooms         rooms[]
+  plaza_tags    plaza_tags[]
 
   @@index([owner_id], map: "idx_plazas_owner")
+  @@index([category_code, use_yn], map: "idx_plazas_search")
 }
 
 model email_codes {
@@ -220,22 +227,68 @@ model user_blocks {
 }
 
 model rooms {
-  id            BigInt    @id @default(autoincrement())
+  id            BigInt      @id @default(autoincrement())
   plaza_id      BigInt?
   owner_id      BigInt?
-  title         String    @db.VarChar(100)
-  max_users     Int       @default(20)
-  current_users Int       @default(0)
-  is_private    Boolean   @default(false)
-  password      String?   @db.VarChar(100)
-  room_type     String    @default("GENERAL") @db.VarChar(20)
-  created_at    DateTime  @default(now()) @db.Timestamp(6)
+  title         String      @db.VarChar(100)
+  max_users     Int         @default(20)
+  current_users Int         @default(0)
+  is_private    Boolean     @default(false)
+  password      String?     @db.VarChar(100)
+  room_type     String      @default("GENERAL") @db.VarChar(20)
+  category_code String      @default("GENERAL") @db.VarChar(30)
+  description   String?     @db.VarChar(300)
+  use_yn        String      @default("Y") @db.Char(1)
+  created_at    DateTime    @default(now()) @db.Timestamp(6)
   parties       parties[]
-  users         users?    @relation(fields: [owner_id], references: [id], onUpdate: NoAction)
-  plazas        plazas?   @relation(fields: [plaza_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?      @relation(fields: [owner_id], references: [id], onUpdate: NoAction)
+  plazas        plazas?     @relation(fields: [plaza_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  room_tags     room_tags[]
 
   @@index([owner_id], map: "idx_rooms_owner_id")
   @@index([plaza_id], map: "idx_rooms_plaza_id")
+  @@index([plaza_id, category_code, use_yn], map: "idx_rooms_search")
+}
+
+model room_categories {
+  code          String   @id @db.VarChar(30)
+  name          String   @db.VarChar(50)
+  display_order Int      @default(0)
+  use_yn        String   @default("Y") @db.Char(1)
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+}
+
+model tags {
+  id         BigInt       @id @default(autoincrement())
+  name       String       @unique @db.VarChar(20)
+  use_yn     String       @default("Y") @db.Char(1)
+  created_at DateTime     @default(now()) @db.Timestamp(6)
+  room_tags  room_tags[]
+  plaza_tags plaza_tags[]
+}
+
+model plaza_tags {
+  plaza_id   BigInt
+  tag_id     BigInt
+  use_yn     String   @default("Y") @db.Char(1)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  plaza      plazas   @relation(fields: [plaza_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tag        tags     @relation(fields: [tag_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([plaza_id, tag_id])
+  @@index([tag_id, use_yn], map: "idx_plaza_tags_search")
+}
+
+model room_tags {
+  room_id    BigInt
+  tag_id     BigInt
+  use_yn     String   @default("Y") @db.Char(1)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  room       rooms    @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tag        tags     @relation(fields: [tag_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([room_id, tag_id])
+  @@index([tag_id, use_yn], map: "idx_room_tags_search")
 }
 
 model user_items {
@@ -266,6 +319,7 @@ model users {
   privacy_consent_yn     String             @default("N") @db.Char(1)
   privacy_consent_at     DateTime?          @db.Timestamp(6)
   privacy_policy_version String?            @db.VarChar(20)
+  last_plaza_id          BigInt?
   created_at             DateTime           @default(now()) @db.Timestamp(6)
   character_parts        character_parts[]
   character_presets      character_presets?

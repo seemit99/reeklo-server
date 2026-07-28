@@ -1,7 +1,7 @@
 import {
   Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGuards,
 } from '@nestjs/common'
-import { IsNotEmpty, IsOptional, MaxLength } from 'class-validator'
+import { IsArray, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 import { ok } from '../common/api-response'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -17,6 +17,9 @@ class CreateRoomRequest {
   @IsOptional() isPrivate?: boolean
   @IsOptional() password?: string
   @IsOptional() roomType?: string
+  @IsString() categoryCode!: string
+  @IsOptional() @MaxLength(300) description?: string
+  @IsOptional() @IsArray() tags?: string[]
 }
 
 @Controller('api/rooms')
@@ -25,8 +28,24 @@ export class RoomsController {
 
   // PlazaView의 방 목록 패널에서 특정 광장에 만들어진 방들을 조회할 때 호출한다.
   @Get()
-  async getRooms(@Query('plazaId', ParseIntPipe) plazaId: number) {
-    return ok(await this.roomsService.getRooms(plazaId))
+  async getRooms(
+    @Query('plazaId', ParseIntPipe) plazaId: number,
+    @Query('category') category?: string,
+    @Query('keyword') keyword?: string,
+    @Query('tag') tag?: string,
+    @Query('onlyJoinable') onlyJoinable?: string,
+  ) {
+    return ok(await this.roomsService.getRooms(plazaId, {
+      category,
+      keyword,
+      tag,
+      onlyJoinable: onlyJoinable === 'true',
+    }))
+  }
+
+  @Get('categories/all')
+  async getCategories() {
+    return ok(await this.roomsService.getCategories())
   }
 
   // RoomView 진입 시 방 제목·소유자·정원 등 상세 정보를 불러올 때 호출한다.
