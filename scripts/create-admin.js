@@ -9,8 +9,8 @@ async function main() {
   const nickname = process.env.ADMIN_NICKNAME || '관리자'
   const password = process.env.ADMIN_PASSWORD
 
-  if (!password || password.length < 12) {
-    throw new Error('ADMIN_PASSWORD must be set to at least 12 characters.')
+  if (!password || password.length < 10) {
+    throw new Error('ADMIN_PASSWORD must be set to at least 10 characters.')
   }
 
   const existing = await prisma.users.findFirst({
