@@ -263,3 +263,12 @@ Remaining work:
 ```
 
 이 기록이 없으면 다음 작업자는 운영 배포를 진행하지 않는다.
+
+## 14. 2026-07-29 최신 운영 기준
+
+- Web 운영 기준은 `main`의 `1299b3c`이다.
+- Server 운영 기준은 `master`의 `359008c`이다.
+- 운영 배포와 DB 변경 상세는 `docs/RELEASE_2026-07-28.md`를 확인한다.
+- 운영 관리자는 별도 계정이 아니라 기존 `jwpark429@naver.com` 계정에 `ADMIN` 역할을 부여해 사용한다.
+- 운영 DB 변경 전 Cloud SQL 온디맨드 백업 `before-admin-recovery-deploy-20260728`을 생성했다.
+- Web 롤백 기준은 `5209ccc`, Server 롤백 기준은 `134b691`이다.
