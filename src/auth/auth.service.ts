@@ -1,15 +1,19 @@
 import {
-  BadRequestException, ConflictException, Injectable, NotFoundException,
-  ServiceUnavailableException,
+  BadRequestException, ConflictException, HttpException, HttpStatus, Injectable,
+  NotFoundException, ServiceUnavailableException,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcryptjs'
 import { MailService } from '../mail/mail.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { LoginRequest, RegisterRequest, TokenResponse } from './dto'
+import { normalizeRecoveryAnswer } from './recovery-questions'
 
 const CODE_TTL_MS = 10 * 60 * 1000   // 인증 코드 유효 10분
 const CODE_RESEND_MS = 60 * 1000     // 재발송 최소 간격 1분
+const RECOVERY_MAX_FAILURES = 5
+const RECOVERY_LOCK_MS = 15 * 60 * 1000
+const DUMMY_RECOVERY_HASH = bcrypt.hashSync('invalid-recovery-answer', 10)
 
 @Injectable()
 export class AuthService {
@@ -26,12 +30,6 @@ export class AuthService {
     if (await this.prisma.users.findUnique({ where: { username: req.username } })) {
       throw new ConflictException('이미 사용 중인 아이디입니다.')
     }
-    // 메일 발송이 가능한 환경에서만 이메일 인증을 강제 (SMTP 미설정 로컬/초기 프로드는 통과)
-    if (this.mail.enabled) {
-      if (!req.emailCode) throw new BadRequestException('이메일 인증 코드를 입력해주세요.')
-      await this.consumeCode(req.email, req.emailCode, 'SIGNUP')
-    }
-
     const user = await this.prisma.users.create({
       data: {
         username: req.username,
@@ -41,16 +39,24 @@ export class AuthService {
         coin: 0,
         privacy_consent_yn: req.privacyConsentYn,
         privacy_consent_at: new Date(),
-        privacy_policy_version: '2026-07-27',
+        privacy_policy_version: '2026-07-28',
+        password_recovery_questions: {
+          create: {
+            question: req.recoveryQuestion,
+            answer_hash: await bcrypt.hash(normalizeRecoveryAnswer(req.recoveryAnswer), 10),
+          },
+        },
       },
     })
     return this.tokenOf(user.id, user.email, user.session_version)
   }
 
   async login(req: LoginRequest): Promise<TokenResponse> {
-    const user = await this.prisma.users.findUnique({ where: { email: req.email } })
-    if (!user || !(await bcrypt.compare(req.password, user.password))) {
-      throw new BadRequestException('이메일 또는 비밀번호가 올바르지 않습니다.')
+    const user =
+      (await this.prisma.users.findUnique({ where: { email: req.email } })) ??
+      (await this.prisma.users.findUnique({ where: { username: req.email } }))
+    if (!user || user.use_yn !== 'Y' || !(await bcrypt.compare(req.password, user.password))) {
+      throw new BadRequestException('이메일·아이디 또는 비밀번호가 올바르지 않습니다.')
     }
     const session = await this.prisma.users.update({
       where: { id: user.id },
@@ -132,6 +138,110 @@ export class AuthService {
       where: { id: user.id },
       data: { password: await bcrypt.hash(newPassword, 10) },
     })
+  }
+
+  async resetPasswordByQuestion(
+    email: string,
+    recoveryQuestion: string,
+    recoveryAnswer: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.users.findUnique({
+      where: { email },
+      include: {
+        password_recovery_questions: {
+          where: { use_yn: 'Y' },
+          orderBy: { created_at: 'desc' },
+          take: 1,
+        },
+      },
+    })
+    const recovery = user?.password_recovery_questions[0]
+
+    if (!user || !recovery) {
+      // 등록되지 않은 계정도 해시 비교를 거쳐 응답 시간 차이를 줄인다.
+      await bcrypt.compare(normalizeRecoveryAnswer(recoveryAnswer), DUMMY_RECOVERY_HASH)
+      throw new BadRequestException('이메일, 질문 또는 답변이 올바르지 않습니다.')
+    }
+
+    if (recovery.locked_until && recovery.locked_until.getTime() > Date.now()) {
+      throw new HttpException(
+        '답변 확인 횟수를 초과했습니다. 15분 후 다시 시도해주세요.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
+
+    const failedCount = recovery.locked_until ? 0 : recovery.failed_count
+    const answerMatches = await bcrypt.compare(
+      normalizeRecoveryAnswer(recoveryAnswer),
+      recovery.answer_hash,
+    )
+    if (recovery.question !== recoveryQuestion || !answerMatches) {
+      const nextFailedCount = failedCount + 1
+      await this.prisma.password_recovery_questions.update({
+        where: { id: recovery.id },
+        data: {
+          failed_count: nextFailedCount,
+          locked_until:
+            nextFailedCount >= RECOVERY_MAX_FAILURES
+              ? new Date(Date.now() + RECOVERY_LOCK_MS)
+              : null,
+          updated_at: new Date(),
+        },
+      })
+      throw new BadRequestException('이메일, 질문 또는 답변이 올바르지 않습니다.')
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.users.update({
+        where: { id: user.id },
+        data: {
+          password: await bcrypt.hash(newPassword, 10),
+          session_version: { increment: 1 },
+        },
+      }),
+      this.prisma.password_recovery_questions.update({
+        where: { id: recovery.id },
+        data: { failed_count: 0, locked_until: null, updated_at: new Date() },
+      }),
+    ])
+  }
+
+  async getRecoveryQuestionStatus(userId: number) {
+    const recovery = await this.prisma.password_recovery_questions.findFirst({
+      where: { user_id: BigInt(userId), use_yn: 'Y' },
+      orderBy: { created_at: 'desc' },
+      select: { question: true },
+    })
+    return { configured: !!recovery, question: recovery?.question ?? null }
+  }
+
+  async setRecoveryQuestion(
+    userId: number,
+    currentPassword: string,
+    recoveryQuestion: string,
+    recoveryAnswer: string,
+  ): Promise<void> {
+    const user = await this.prisma.users.findUnique({ where: { id: BigInt(userId) } })
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      throw new BadRequestException('현재 비밀번호가 올바르지 않습니다.')
+    }
+
+    const answerHash = await bcrypt.hash(normalizeRecoveryAnswer(recoveryAnswer), 10)
+    await this.prisma.$transaction([
+      this.prisma.password_recovery_questions.updateMany({
+        where: { user_id: user.id, use_yn: 'Y' },
+        data: { use_yn: 'N', updated_at: new Date() },
+      }),
+      this.prisma.password_recovery_questions.create({
+        data: {
+          user_id: user.id,
+          question: recoveryQuestion,
+          answer_hash: answerHash,
+          use_yn: 'Y',
+        },
+      }),
+    ])
   }
 
   get emailVerificationEnabled(): boolean {

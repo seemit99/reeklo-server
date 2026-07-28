@@ -5,8 +5,8 @@ import { JwtAuthGuard } from './jwt-auth.guard'
 import { JwtUser } from './jwt.strategy'
 import { AuthService } from './auth.service'
 import {
-  ChangePasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest,
-  SendCodeRequest, VerifyCodeRequest,
+  ChangePasswordRequest, LoginRequest, RegisterRequest, ResetPasswordByQuestionRequest,
+  ResetPasswordRequest, SendCodeRequest, SetRecoveryQuestionRequest, VerifyCodeRequest,
 } from './dto'
 
 @Controller('api/auth')
@@ -53,11 +53,43 @@ export class AuthController {
     return ok(null, '비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.')
   }
 
+  @Post('password/reset-by-question')
+  async resetPasswordByQuestion(@Body() req: ResetPasswordByQuestionRequest) {
+    await this.authService.resetPasswordByQuestion(
+      req.email,
+      req.recoveryQuestion,
+      req.recoveryAnswer,
+      req.newPassword,
+    )
+    return ok(null, '비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.')
+  }
+
   // SettingsView에서 로그인 사용자가 현재 비밀번호를 확인하고 새 비밀번호로 변경할 때 호출한다.
   @Post('password/change')
   @UseGuards(JwtAuthGuard)
   async changePassword(@CurrentUser() user: JwtUser, @Body() req: ChangePasswordRequest) {
     await this.authService.changePassword(user.userId, req.currentPassword, req.newPassword)
     return ok(null, '비밀번호가 변경되었습니다.')
+  }
+
+  @Get('password/recovery-question')
+  @UseGuards(JwtAuthGuard)
+  async recoveryQuestionStatus(@CurrentUser() user: JwtUser) {
+    return ok(await this.authService.getRecoveryQuestionStatus(user.userId))
+  }
+
+  @Post('password/recovery-question')
+  @UseGuards(JwtAuthGuard)
+  async setRecoveryQuestion(
+    @CurrentUser() user: JwtUser,
+    @Body() req: SetRecoveryQuestionRequest,
+  ) {
+    await this.authService.setRecoveryQuestion(
+      user.userId,
+      req.currentPassword,
+      req.recoveryQuestion,
+      req.recoveryAnswer,
+    )
+    return ok(null, '비밀번호 찾기 질문이 저장되었습니다.')
   }
 }
